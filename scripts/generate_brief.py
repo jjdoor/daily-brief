@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
-import google.generativeai as genai
+from google import genai
 
 sys.path.insert(0, os.path.dirname(__file__))
 from fetch_github import fetch_github_trending
@@ -106,10 +106,12 @@ def main():
     print(f'  Got {len(rss_items)} items')
 
     print('Generating brief with Gemini...')
-    genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
     prompt = build_prompt(github_repos, rss_items)
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=prompt,
+    )
     brief = response.text
 
     today = datetime.now().strftime('%Y-%m-%d %A')
