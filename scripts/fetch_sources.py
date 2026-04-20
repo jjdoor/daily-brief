@@ -3,16 +3,20 @@ from datetime import datetime, timezone, timedelta
 
 
 RSS_FEEDS = [
-    # AI/ML
-    ('TLDR AI',     'https://tldr.tech/api/rss/ai'),
-    ('The Batch',   'https://www.deeplearning.ai/the-batch/feed/'),
-    ('HN 首页',     'https://hnrss.org/frontpage'),
-    # 独立开发者
-    ('HN Show HN',  'https://hnrss.org/show'),
-    ('Indie Hackers','https://www.indiehackers.com/feed.rss'),
-    ('Reddit IndieHacking', 'https://www.reddit.com/r/indiehackers/.rss'),
-    ('Reddit LocalLLaMA',   'https://www.reddit.com/r/LocalLLaMA/.rss'),
+    # AI 工具更新
+    ('TLDR AI',          'https://tldr.tech/api/rss/ai'),
+    ('AI News',          'https://buttondown.com/ainews/rss'),
+    ('Product Hunt',     'https://www.producthunt.com/feed'),
+    ('HN 首页',          'https://hnrss.org/frontpage'),
+    ('Reddit LocalLLaMA','https://www.reddit.com/r/LocalLLaMA/.rss'),
+    # 副业 / 变现案例
+    ('Indie Hackers',    'https://www.indiehackers.com/feed.rss'),
+    ('HN Show HN',       'https://hnrss.org/show'),
+    ('Reddit SideProject','https://www.reddit.com/r/SideProject/.rss'),
+    ('Reddit Freelance', 'https://www.reddit.com/r/freelance/.rss'),
+    # 技术机会信号
     ('Reddit MachineLearning', 'https://www.reddit.com/r/MachineLearning/.rss'),
+    ('The Batch',        'https://www.deeplearning.ai/the-batch/feed/'),
 ]
 
 
