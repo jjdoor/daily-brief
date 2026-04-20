@@ -5,7 +5,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
-from google import genai
+from groq import Groq
 
 sys.path.insert(0, os.path.dirname(__file__))
 from fetch_github import fetch_github_trending
@@ -105,26 +105,15 @@ def main():
     rss_items = fetch_rss_feeds()
     print(f'  Got {len(rss_items)} items')
 
-    print('Generating brief with Gemini...')
-    client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
+    print('Generating brief with Groq...')
+    client = Groq(api_key=os.environ['GROQ_API_KEY'])
     prompt = build_prompt(github_repos, rss_items)
-
-    import time
-    for attempt in range(4):
-        try:
-            response = client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=prompt,
-            )
-            brief = response.text
-            break
-        except Exception as e:
-            if '429' in str(e) and attempt < 3:
-                wait = 30 * (attempt + 1)
-                print(f'Rate limited, retrying in {wait}s...')
-                time.sleep(wait)
-            else:
-                raise
+    response = client.chat.completions.create(
+        model='llama-3.3-70b-versatile',
+        messages=[{'role': 'user', 'content': prompt}],
+        max_tokens=2048,
+    )
+    brief = response.choices[0].message.content
 
     today = datetime.now().strftime('%Y-%m-%d %A')
     subject = f'🤖 AI & 独立开发日报 {today}'
