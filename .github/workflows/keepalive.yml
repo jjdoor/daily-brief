@@ -5,6 +5,10 @@ on:
     - cron: '0 0 1 * *'  # 每月1日 UTC 00:00 执行
   workflow_dispatch:
 
+# 授予工作流内 GITHUB_TOKEN 写权限,否则 git push 会被 403 拒绝
+permissions:
+  contents: write
+
 jobs:
   keepalive:
     runs-on: ubuntu-latest
