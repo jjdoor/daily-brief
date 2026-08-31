@@ -13,6 +13,44 @@ from fetch_sources import fetch_rss_feeds
 from fetch_youtube import fetch_youtube_videos
 
 
+# 模型偏好队列：Groq 会不定期下线模型（llama-3.3-70b-versatile 已于 2026-08-16 停服），
+# 所以运行时先拉一次线上模型列表，按队列挑第一个还活着的，避免再次因写死模型名而整条流水线挂掉。
+MODEL_PREFERENCE = [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'qwen/qwen3.6-27b',
+    'groq/compound',
+]
+
+# 非对话模型（语音/嵌入/安全审查/视觉）关键字，兜底挑选时排除
+NON_CHAT_KEYWORDS = ('whisper', 'tts', 'embed', 'guard', 'vision', '-vl-', 'orpheus')
+
+
+def pick_model(client):
+    """挑一个当前真实可用的对话模型；GROQ_MODEL 环境变量优先。"""
+    preference = [m for m in [os.environ.get('GROQ_MODEL')] if m] + MODEL_PREFERENCE
+
+    try:
+        available = {m.id for m in client.models.list().data}
+    except Exception as exc:
+        print(f'  警告: 拉取模型列表失败({exc})，直接使用 {preference[0]}')
+        return preference[0]
+
+    for model in preference:
+        if model in available:
+            return model
+
+    # 偏好队列全军覆没时，从线上列表里挑一个看起来能对话的，保证日报还能发出去
+    fallback = sorted(
+        m for m in available
+        if not any(k in m.lower() for k in NON_CHAT_KEYWORDS)
+    )
+    if not fallback:
+        raise SystemExit(f'没有可用的对话模型，线上列表: {sorted(available)}')
+    print(f'  警告: 偏好模型均不可用，回退到 {fallback[0]}')
+    return fallback[0]
+
+
 def build_prompt(github_repos, rss_items, youtube_items):
     github_text = '\n'.join([
         f"- [{r['name']}]({r['url']}): {r['description']} | 今日新增: {r['stars_today']} | 语言: {r['language']}"
@@ -120,8 +158,10 @@ def main():
     print('Generating brief with Groq...')
     client = Groq(api_key=os.environ['GROQ_API_KEY'])
     prompt = build_prompt(github_repos, rss_items, youtube_items)
+    model = pick_model(client)
+    print(f'  使用模型: {model}')
     response = client.chat.completions.create(
-        model='llama-3.3-70b-versatile',
+        model=model,
         messages=[{'role': 'user', 'content': prompt}],
         max_tokens=2048,
     )
