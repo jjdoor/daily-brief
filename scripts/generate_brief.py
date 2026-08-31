@@ -1,6 +1,7 @@
 import os
 import sys
 import smtplib
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -51,15 +52,58 @@ def pick_model(client):
     return fallback[0]
 
 
-def build_prompt(github_repos, rss_items, youtube_items):
+# 免费档 TPM(每分钟 token)只有 8000，整条 prompt + max_tokens 必须塞进这个额度内。
+# 实测口径：中英混排约 3.6 字符/token（28000 字符 = 7734 token，由 Groq 413 报错回读得出）。
+CHARS_PER_TOKEN = 3.6
+TOKEN_BUDGET = int(os.environ.get('GROQ_TOKEN_BUDGET', 8000))
+MAX_OUTPUT_TOKENS = int(os.environ.get('GROQ_MAX_TOKENS', 1600))
+SAFETY_MARGIN_TOKENS = 600
+
+# 素材条数梯队：先按字符预算挑起点，真撞 413 再逐级往下退
+CONTENT_LADDER = [(30, 60), (20, 35), (14, 22), (9, 14), (6, 8)]
+
+
+def generate_brief(client, model, github_repos, rss_items, youtube_items):
+    """按 token 预算裁剪素材生成日报；撞 413 就再降一档重试。"""
+    budget_chars = (TOKEN_BUDGET - MAX_OUTPUT_TOKENS - SAFETY_MARGIN_TOKENS) * CHARS_PER_TOKEN
+
+    start = 0
+    for i, (gh_n, rss_n) in enumerate(CONTENT_LADDER):
+        prompt = build_prompt(github_repos, rss_items, youtube_items, gh_n, rss_n)
+        start = i
+        if len(prompt) <= budget_chars:
+            break
+
+    last_error = None
+    for gh_n, rss_n in CONTENT_LADDER[start:]:
+        prompt = build_prompt(github_repos, rss_items, youtube_items, gh_n, rss_n)
+        print(f'  素材条数 github={gh_n} rss={rss_n}，prompt {len(prompt)} 字符')
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{'role': 'user', 'content': prompt}],
+                max_tokens=MAX_OUTPUT_TOKENS,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            if getattr(exc, 'status_code', None) != 413:
+                raise
+            last_error = exc
+            print(f'  超出 token 额度，降一档重试: {exc}')
+            time.sleep(5)
+
+    raise SystemExit(f'素材裁到最小仍超额度: {last_error}')
+
+
+def build_prompt(github_repos, rss_items, youtube_items, gh_limit=30, rss_limit=60):
     github_text = '\n'.join([
         f"- [{r['name']}]({r['url']}): {r['description']} | 今日新增: {r['stars_today']} | 语言: {r['language']}"
-        for r in github_repos[:30]
+        for r in github_repos[:gh_limit]
     ]) or '（无数据）'
 
     rss_text = '\n'.join([
         f"- [{item['source']}] {item['title']}\n  摘要: {item['summary'][:200]}\n  链接: {item['url']}"
-        for item in rss_items[:60]
+        for item in rss_items[:rss_limit]
     ]) or '（无数据）'
 
     youtube_text = '\n'.join([
@@ -157,15 +201,9 @@ def main():
 
     print('Generating brief with Groq...')
     client = Groq(api_key=os.environ['GROQ_API_KEY'])
-    prompt = build_prompt(github_repos, rss_items, youtube_items)
     model = pick_model(client)
     print(f'  使用模型: {model}')
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{'role': 'user', 'content': prompt}],
-        max_tokens=2048,
-    )
-    brief = response.choices[0].message.content
+    brief = generate_brief(client, model, github_repos, rss_items, youtube_items)
 
     today = datetime.now().strftime('%Y-%m-%d %A')
     subject = f'💰 副业情报日报 {today}'
